@@ -26,15 +26,13 @@ string[] splitStartLine = startLine.Split(" ");
 
 string requestPath = splitStartLine[1];
 
+Console.Write(requestPath);
+
 string response;
-if (requestPath != "/")
-{
-    response = "HTTP/1.1 404 Not Found\r\n\r\n";
-}
-else if (requestPath.StartsWith("echo")) {
-    var pathParams = requestPath.Split("/");
+if (requestPath.StartsWith("/echo")) {
+    var pathParams = requestPath.Remove(0, 1).Split("/");
     var data = pathParams[1];
-    response = string.Format("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length:{0}\r\n\r{0}", data.Length, data);
+    response = string.Format("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length:{0}\r\n\r\n{1}\r\n", data.Length, data);
 
     //     // Status line
     // HTTP/1.1 200 OK
@@ -47,6 +45,10 @@ else if (requestPath.StartsWith("echo")) {
 
     // // Response body
     // abc                           // The string from the request
+}
+else if (requestPath != "/")
+{
+    response = "HTTP/1.1 404 Not Found\r\n\r\n";
 }
 else
 {
