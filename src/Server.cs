@@ -12,7 +12,9 @@ int bufferLength = clientSocket.Receive(buffer);
 string request = Encoding.UTF8.GetString(buffer, 0, bufferLength);
 string[] splitRequest = request.Split("\n");
 
-//GET / HTTP/1.1
+//GET 
+// / 
+//HTTP/1.1
 //Host: localhost:4221
 //User-Agent: curl/8.4.0
 //Accept: */*
@@ -28,6 +30,23 @@ string response;
 if (requestPath != "/")
 {
     response = "HTTP/1.1 404 Not Found\r\n\r\n";
+}
+else if (requestPath.StartsWith("echo")) {
+    var pathParams = requestPath.Split("/");
+    var data = pathParams[1];
+    response = string.Format("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length:{0}\r\n\r{0}", data.Length, data);
+
+    //     // Status line
+    // HTTP/1.1 200 OK
+    // \r\n                          // CRLF that marks the end of the status line
+
+    // // Headers
+    // Content-Type: text/plain\r\n  // Header that specifies the format of the response body
+    // Content-Length: 3\r\n         // Header that specifies the size of the response body, in bytes
+    // \r\n                          // CRLF that marks the end of the headers
+
+    // // Response body
+    // abc                           // The string from the request
 }
 else
 {
