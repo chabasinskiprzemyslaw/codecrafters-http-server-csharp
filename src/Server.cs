@@ -6,6 +6,8 @@ const string HTTP_VERSION = "HTTP/1.1";
 const string HTTP200OK = "200 OK";
 const string HTTP404NotFound = "404 Not Found";
 
+string directory = parseDirectory(args);
+
 Console.WriteLine("Starting server...");
 
 TcpListener server = new TcpListener(IPAddress.Any, 4221);
@@ -21,7 +23,7 @@ async Task HandeRequest(Socket socket) {
     byte[] buffer = new byte[1024];
     int bufferLength = await socket.ReceiveAsync(buffer);
     string request = Encoding.UTF8.GetString(buffer, 0, bufferLength);
-    string response = handleResponse(request);
+    string response = createResponse(request);
 
     byte[] responseBytes = Encoding.UTF8.GetBytes(response);
 
@@ -31,7 +33,7 @@ async Task HandeRequest(Socket socket) {
 
 }
 
-string handleResponse(string request) {
+string createResponse(string request) {
     string responseContent = string.Empty;
     string requestPath = extractPath(request);
     string[] splitRequest = request.Split("\n");
@@ -51,11 +53,29 @@ string handleResponse(string request) {
         string param = extractParamFromPath(requestPath);
         responseContent = buildResponse(param);
     }
+    else if (requestPath.StartsWith("/files")) {
+        string fileName = extractParamFromPath(requestPath);
+        try {
+            string fileContent = File.ReadAllText($"{directory}{fileName}");
+            responseContent = buildResponse(fileContent, true);
+        }
+        catch (FileNotFoundException) {
+            responseContent = $"{HTTP_VERSION} {HTTP404NotFound}\r\n\r\n";
+        }
+    }
     else {
         responseContent = $"{HTTP_VERSION} {HTTP404NotFound}\r\n\r\n";
     }
 
     return responseContent;
+}
+
+string parseDirectory(string[] args) {
+    string directory = string.Empty;
+    if (args.Length > 0) {
+        directory = args[1];
+    }
+    return directory;
 }
 
 string extractHeader(string[] splitRequest, string headerName) {
@@ -69,9 +89,10 @@ string extractHeader(string[] splitRequest, string headerName) {
     return headerValue;
 }
 
-string buildResponse(string responseContent) {
-    int responseBodyBytes = Encoding.UTF8.GetByteCount(responseContent);
-    string responseHeaders = $"{HTTP_VERSION} {HTTP200OK}\r\nContent-Type: text/plain\r\nContent-Length: {responseContent.Length}\r\n\r\n{responseContent}";
+string buildResponse(string responseContent, bool isFile = false) {
+    int responseBodyBytes = Encoding.ASCII.GetByteCount(responseContent);
+    string contentType = isFile ? "application/octet-stream" : "text/plain";
+    string responseHeaders = $"{HTTP_VERSION} {HTTP200OK}\r\nContent-Type: {contentType}\r\nContent-Length: {responseBodyBytes}\r\n\r\n{responseContent}";
     return responseHeaders;
 }
 
