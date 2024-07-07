@@ -13,21 +13,23 @@ Console.WriteLine("Listening on port 4221...");
 server.Start();
 
 while (true) {
-    Socket clientSocket = server.AcceptSocket(); // wait for client
+    Socket clientSocket = await server.AcceptSocketAsync(); // wait for client
+    await HandeRequest(clientSocket);
+}
 
+async Task HandeRequest(Socket socket) {
     byte[] buffer = new byte[1024];
-    int bufferLength = clientSocket.Receive(buffer);
+    int bufferLength = await socket.ReceiveAsync(buffer);
     string request = Encoding.UTF8.GetString(buffer, 0, bufferLength);
     string response = handleResponse(request);
 
     byte[] responseBytes = Encoding.UTF8.GetBytes(response);
 
-    clientSocket.Send(responseBytes);
+    await socket.SendAsync(responseBytes);
 
-    clientSocket.Close();
+    socket.Close();
+
 }
-
-//server.Stop();
 
 string handleResponse(string request) {
     string responseContent = string.Empty;
