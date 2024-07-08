@@ -5,6 +5,7 @@ using System.Text;
 const string HTTP_VERSION = "HTTP/1.1";
 const string HTTP200OK = "200 OK";
 const string HTTP404NotFound = "404 Not Found";
+const string HTTP201Created = "201 Created";
 
 string directory = parseDirectory(args);
 
@@ -23,7 +24,8 @@ async Task HandeRequest(Socket socket) {
     byte[] buffer = new byte[1024];
     int bufferLength = await socket.ReceiveAsync(buffer);
     string request = Encoding.UTF8.GetString(buffer, 0, bufferLength);
-    string response = createResponse(request);
+    string httpMethod = extractHttpMethod(request);
+    string response = createResponse(httpMethod, request);
 
     byte[] responseBytes = Encoding.UTF8.GetBytes(response);
 
@@ -32,7 +34,38 @@ async Task HandeRequest(Socket socket) {
     socket.Close();
 }
 
-string createResponse(string request) {
+string createResponse(string httpMethod, string request) {
+    string responseContent = string.Empty;
+    if (httpMethod.StartsWith("GET")) {
+        responseContent = createGetResponse(request);
+    }
+    else if (httpMethod.StartsWith("POST")) {
+        responseContent = handlePostRequest(request);
+    }
+    else {
+        responseContent = $"{HTTP_VERSION} {HTTP404NotFound}\r\n\r\n";
+    }
+    return responseContent;
+}
+
+string handlePostRequest(string request) {
+    string responseContent = string.Empty;
+    string requestPath = extractPath(request);
+
+    if (requestPath.StartsWith("/files")) {
+        string fileName = extractParamFromPath(requestPath);
+        string fileContent = request.Split("\n")[request.Split("\n").Length - 1];
+        File.WriteAllText($"{directory}{fileName}", fileContent);
+        responseContent = $"{HTTP_VERSION} {HTTP201Created}\r\n\r\n";
+    }
+    else {
+        responseContent = $"{HTTP_VERSION} {HTTP404NotFound}\r\n\r\n";
+    }
+
+    return responseContent;
+}
+
+string createGetResponse(string request) {
     string responseContent = string.Empty;
     string requestPath = extractPath(request);
     string[] splitRequest = request.Split("\n");
@@ -93,6 +126,13 @@ string buildResponse(string responseContent, bool isFile = false) {
     string contentType = isFile ? "application/octet-stream" : "text/plain";
     string responseHeaders = $"{HTTP_VERSION} {HTTP200OK}\r\nContent-Type: {contentType}\r\nContent-Length: {responseBodyBytes}\r\n\r\n{responseContent}";
     return responseHeaders;
+}
+
+string extractHttpMethod(string request) {
+    string[] splitRequest = request.Split("\n");
+    string startLine = splitRequest[0];
+    string[] splitStartLine = startLine.Split(" ");
+    return splitStartLine[0];
 }
 
 string extractPath(string request) {
