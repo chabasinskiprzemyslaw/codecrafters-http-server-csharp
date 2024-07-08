@@ -30,7 +30,6 @@ async Task HandeRequest(Socket socket) {
     await socket.SendAsync(responseBytes);
 
     socket.Close();
-
 }
 
 string createResponse(string request) {
