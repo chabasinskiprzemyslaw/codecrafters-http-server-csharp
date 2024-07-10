@@ -122,21 +122,45 @@ string extractHeader(string[] splitRequest, string headerName) {
     return headerValue;
 }
 
-string buildResponse(string responseContent, string acceptEncoding, bool isFile = false) {
-    int responseBodyBytes = Encoding.ASCII.GetByteCount(responseContent);
+string serverContentEncoding(string[] acceptEncoding) {
+    //source can encode in multiple ways
+    //server can encode in only one way
+    string contentEncoding = string.Empty;
+    foreach (var encoding in acceptEncoding) {
+        if (encoding.Contains("gzip")) {
+            contentEncoding = "gzip";
+            break;
+        }
+    }
+    return contentEncoding;
+}
+
+StringBuilder buildHeaderResponse(StringBuilder sb, bool isFile, string acceptEncoding, int responseBodyBytes) {
     string contentType = isFile ? "application/octet-stream" : "text/plain";
-    string contentEncoding = $"Content-Encoding: {acceptEncoding}\r\n";
+
+    string[] acceptEncodingTable = acceptEncoding.Split(",");
+    string serverAvailableContentEncoding = serverContentEncoding(acceptEncodingTable);
+
     string contentTypeHeader = $"Content-Type: {contentType}\r\n";
     string contentLength = $"Content-Length: {responseBodyBytes}\r\n\r\n";
+    
+    if (serverAvailableContentEncoding != string.Empty) {
+        string contentEncoding = $"Content-Encoding: {serverAvailableContentEncoding}\r\n";
+        sb.Append(contentEncoding);
+    }
+    sb.Append(contentTypeHeader);
+    sb.Append(contentLength);
+
+    return sb;
+}
+
+string buildResponse(string responseContent, string acceptEncoding, bool isFile = false) {
+    int responseBodyBytes = Encoding.ASCII.GetByteCount(responseContent);
 
     StringBuilder sb = new StringBuilder();
     string startLine = $"{HTTP_VERSION} {HTTP200OK}\r\n";
     sb.Append(startLine);
-    if (acceptEncoding.Contains("gzip")) {
-        sb.Append(contentEncoding);
-    }
-    sb.Append(contentTypeHeader);
-    sb.Append($"{contentLength}");
+    buildHeaderResponse(sb, isFile, acceptEncoding, responseBodyBytes);
     sb.Append(responseContent);
     return sb.ToString();
 }
