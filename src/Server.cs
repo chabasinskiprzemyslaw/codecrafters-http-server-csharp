@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -26,17 +27,15 @@ async Task HandeRequest(Socket socket) {
     string request = Encoding.UTF8.GetString(buffer, 0, bufferLength);
     string acceptEncoding = extractHeader(request.Split("\n"), "Accept-Encoding:");
     string httpMethod = extractHttpMethod(request);
-    string response = createResponse(httpMethod, acceptEncoding, request);
-
-    byte[] responseBytes = Encoding.UTF8.GetBytes(response);
+    byte[] responseBytes = createResponse(httpMethod, acceptEncoding, request);
 
     await socket.SendAsync(responseBytes);
 
     socket.Close();
 }
 
-string createResponse(string httpMethod, string acceptEncoding, string request) {
-    string responseContent = string.Empty;
+byte[] createResponse(string httpMethod, string acceptEncoding, string request) {
+    byte[] responseContent = [];
     if (httpMethod.StartsWith("GET")) {
         responseContent = createGetResponse(acceptEncoding, request);
     }
@@ -44,34 +43,34 @@ string createResponse(string httpMethod, string acceptEncoding, string request) 
         responseContent = handlePostRequest(request);
     }
     else {
-        responseContent = $"{HTTP_VERSION} {HTTP404NotFound}\r\n\r\n";
+        responseContent = Encoding.ASCII.GetBytes($"{HTTP_VERSION} {HTTP404NotFound}\r\n\r\n");
     }
     return responseContent;
 }
 
-string handlePostRequest(string request) {
-    string responseContent = string.Empty;
+byte[] handlePostRequest(string request) {
+    byte[] responseContent = [];
     string requestPath = extractPath(request);
 
     if (requestPath.StartsWith("/files")) {
         string fileName = extractParamFromPath(requestPath);
         string fileContent = request.Split("\n")[request.Split("\n").Length - 1];
         File.WriteAllText($"{directory}{fileName}", fileContent);
-        responseContent = $"{HTTP_VERSION} {HTTP201Created}\r\n\r\n";
+        responseContent = Encoding.ASCII.GetBytes($"{HTTP_VERSION} {HTTP201Created}\r\n\r\n");
     }
     else {
-        responseContent = $"{HTTP_VERSION} {HTTP404NotFound}\r\n\r\n";
+        responseContent = Encoding.ASCII.GetBytes($"{HTTP_VERSION} {HTTP404NotFound}\r\n\r\n");
     }
 
     return responseContent;
 }
 
-string createGetResponse(string acceptEncoding, string request) {
-    string responseContent = string.Empty;
+byte[] createGetResponse(string acceptEncoding, string request) {
+    byte[] responseContent = [];
     string requestPath = extractPath(request);
     string[] splitRequest = request.Split("\n");
     if (requestPath is "/") {
-        responseContent = $"{HTTP_VERSION} {HTTP200OK}\r\n\r\n";
+        responseContent = Encoding.ASCII.GetBytes($"{HTTP_VERSION} {HTTP200OK}\r\n\r\n");
     }
     else if (requestPath.StartsWith("/user-agent")) {
         string userAgent = extractHeader(splitRequest, "User-Agent:");
@@ -79,7 +78,7 @@ string createGetResponse(string acceptEncoding, string request) {
             responseContent = buildResponse(userAgent, acceptEncoding);
         }
         else {
-            responseContent = $"{HTTP_VERSION} {HTTP404NotFound}\r\n\r\n";
+            responseContent = Encoding.ASCII.GetBytes($"{HTTP_VERSION} {HTTP404NotFound}\r\n\r\n");
         }
     }
     else if (requestPath.StartsWith("/echo")) {
@@ -93,11 +92,11 @@ string createGetResponse(string acceptEncoding, string request) {
             responseContent = buildResponse(fileContent, acceptEncoding, true);
         }
         catch (FileNotFoundException) {
-            responseContent = $"{HTTP_VERSION} {HTTP404NotFound}\r\n\r\n";
+            responseContent = Encoding.ASCII.GetBytes($"{HTTP_VERSION} {HTTP404NotFound}\r\n\r\n");
         }
     }
     else {
-        responseContent = $"{HTTP_VERSION} {HTTP404NotFound}\r\n\r\n";
+        responseContent = Encoding.ASCII.GetBytes($"{HTTP_VERSION} {HTTP404NotFound}\r\n\r\n");
     }
 
     return responseContent;
@@ -154,15 +153,43 @@ StringBuilder buildHeaderResponse(StringBuilder sb, bool isFile, string acceptEn
     return sb;
 }
 
-string buildResponse(string responseContent, string acceptEncoding, bool isFile = false) {
-    int responseBodyBytes = Encoding.ASCII.GetByteCount(responseContent);
+byte[] buildResponse(string responseContent, string acceptEncoding, bool isFile = false) {
+    
+    byte[] responseContentBytes;
 
     StringBuilder sb = new StringBuilder();
     string startLine = $"{HTTP_VERSION} {HTTP200OK}\r\n";
     sb.Append(startLine);
-    buildHeaderResponse(sb, isFile, acceptEncoding, responseBodyBytes);
-    sb.Append(responseContent);
-    return sb.ToString();
+    if (isGzip(acceptEncoding) == "gzip") {
+        responseContentBytes = gzipCompress(responseContent);
+    }
+    else {
+        responseContentBytes = Encoding.UTF8.GetBytes(responseContent);
+    }
+
+    buildHeaderResponse(sb, isFile, acceptEncoding, responseContentBytes.Length);
+    var respoonseHeaderBytes = Encoding.UTF8.GetBytes(sb.ToString());
+    return [..respoonseHeaderBytes, ..responseContentBytes];
+}
+
+string isGzip(string acceptEncoding) {
+    string[] acceptEncodingTable = acceptEncoding.Split(",");
+    foreach (var encoding in acceptEncodingTable) {
+        if (encoding.Contains("gzip")) {
+            return "gzip";
+        }
+    }
+    return string.Empty;
+}
+
+byte[] gzipCompress(string content) {
+    byte[] contentBytes = Encoding.UTF8.GetBytes(content);
+    using (MemoryStream memoryStream = new MemoryStream()) {
+        using (GZipStream gzipStream = new GZipStream(memoryStream, CompressionMode.Compress)) {
+            gzipStream.Write(contentBytes, 0, contentBytes.Length);
+        }
+        return memoryStream.ToArray();
+    }
 }
 
 string extractHttpMethod(string request) {
