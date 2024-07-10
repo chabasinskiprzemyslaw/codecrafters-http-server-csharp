@@ -24,8 +24,9 @@ async Task HandeRequest(Socket socket) {
     byte[] buffer = new byte[1024];
     int bufferLength = await socket.ReceiveAsync(buffer);
     string request = Encoding.UTF8.GetString(buffer, 0, bufferLength);
+    string acceptEncoding = extractHeader(request.Split("\n"), "Accept-Encoding:");
     string httpMethod = extractHttpMethod(request);
-    string response = createResponse(httpMethod, request);
+    string response = createResponse(httpMethod, acceptEncoding, request);
 
     byte[] responseBytes = Encoding.UTF8.GetBytes(response);
 
@@ -34,10 +35,10 @@ async Task HandeRequest(Socket socket) {
     socket.Close();
 }
 
-string createResponse(string httpMethod, string request) {
+string createResponse(string httpMethod, string acceptEncoding, string request) {
     string responseContent = string.Empty;
     if (httpMethod.StartsWith("GET")) {
-        responseContent = createGetResponse(request);
+        responseContent = createGetResponse(acceptEncoding, request);
     }
     else if (httpMethod.StartsWith("POST")) {
         responseContent = handlePostRequest(request);
@@ -65,7 +66,7 @@ string handlePostRequest(string request) {
     return responseContent;
 }
 
-string createGetResponse(string request) {
+string createGetResponse(string acceptEncoding, string request) {
     string responseContent = string.Empty;
     string requestPath = extractPath(request);
     string[] splitRequest = request.Split("\n");
@@ -75,7 +76,7 @@ string createGetResponse(string request) {
     else if (requestPath.StartsWith("/user-agent")) {
         string userAgent = extractHeader(splitRequest, "User-Agent:");
         if (!string.IsNullOrEmpty(userAgent)) {
-            responseContent = buildResponse(userAgent);
+            responseContent = buildResponse(userAgent, acceptEncoding);
         }
         else {
             responseContent = $"{HTTP_VERSION} {HTTP404NotFound}\r\n\r\n";
@@ -83,13 +84,13 @@ string createGetResponse(string request) {
     }
     else if (requestPath.StartsWith("/echo")) {
         string param = extractParamFromPath(requestPath);
-        responseContent = buildResponse(param);
+        responseContent = buildResponse(param, acceptEncoding);
     }
     else if (requestPath.StartsWith("/files")) {
         string fileName = extractParamFromPath(requestPath);
         try {
             string fileContent = File.ReadAllText($"{directory}{fileName}");
-            responseContent = buildResponse(fileContent, true);
+            responseContent = buildResponse(fileContent, acceptEncoding, true);
         }
         catch (FileNotFoundException) {
             responseContent = $"{HTTP_VERSION} {HTTP404NotFound}\r\n\r\n";
@@ -121,11 +122,23 @@ string extractHeader(string[] splitRequest, string headerName) {
     return headerValue;
 }
 
-string buildResponse(string responseContent, bool isFile = false) {
+string buildResponse(string responseContent, string acceptEncoding, bool isFile = false) {
     int responseBodyBytes = Encoding.ASCII.GetByteCount(responseContent);
     string contentType = isFile ? "application/octet-stream" : "text/plain";
-    string responseHeaders = $"{HTTP_VERSION} {HTTP200OK}\r\nContent-Type: {contentType}\r\nContent-Length: {responseBodyBytes}\r\n\r\n{responseContent}";
-    return responseHeaders;
+    string contentEncoding = $"Content-Encoding: {acceptEncoding}\r\n";
+    string contentTypeHeader = $"Content-Type: {contentType}\r\n";
+    string contentLength = $"Content-Length: {responseBodyBytes}\r\n\r\n";
+
+    StringBuilder sb = new StringBuilder();
+    string startLine = $"{HTTP_VERSION} {HTTP200OK}\r\n";
+    sb.Append(startLine);
+    if (acceptEncoding.Contains("gzip")) {
+        sb.Append(contentEncoding);
+    }
+    sb.Append(contentTypeHeader);
+    sb.Append($"{contentLength}");
+    sb.Append(responseContent);
+    return sb.ToString();
 }
 
 string extractHttpMethod(string request) {
